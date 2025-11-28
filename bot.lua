@@ -1,102 +1,193 @@
--- AI Bot with HTTP for ComputerCraft
-local AI_BOT = {
-    api_key = "sk-GR3OIGY7wL9HTt7RXJMkQTdez3dflOfK",
-    api_url = "https://api.proxyapi.ru/openai/v1/chat/completions",
-    conversation_history = {}
+-- SMART AI BOT - ComputerCraft Edition
+local AI = {
+    name = "SmartBot",
+    user_name = "friend",
+    mood = "friendly"
 }
 
--- Custom HTTP POST function for ComputerCraft
-function AI_BOT.httpPost(url, data, headers)
-    local command = "post "
-    for k, v in pairs(headers) do
-        command = command .. " -H \"" .. k .. ": " .. v .. "\""
-    end
-    command = command .. " -d \"" .. string.gsub(data, "\"", "\\\"") .. "\" " .. url
+-- Simple neural network simulation
+AI.brain = {
+    patterns = {
+        greetings = {"privet", "hello", "hi", "zdraste", "zdorov"},
+        questions = {"chto", "kak", "pochemu", "zachem", "kogda", "gde"},
+        feelings = {"chuvstv", "nastroen", "emoc", "chuvstvo"},
+        tech = {"komp", "program", "kod", "igra", "minecraft"}
+    },
     
-    local handle = io.popen("curl -s -X POST " .. command)
-    local result = handle:read("*a")
-    handle:close()
-    return result
-end
-
--- Simple JSON encoding
-function AI_BOT.jsonEncode(tbl)
-    local result = "{"
-    for k, v in pairs(tbl) do
-        if type(k) == "string" then
-            result = result .. "\"" .. k .. "\":"
-        end
+    responses = {
+        greetings = {
+            "Privet! Kak tvoi dela?",
+            "Zdravstvuy! Rad tebya videt.",
+            "Privetstvuyu! O chem pobessaem?"
+        },
         
-        if type(v) == "table" then
-            result = result .. AI_BOT.jsonEncode(v)
-        elseif type(v) == "string" then
-            result = result .. "\"" .. string.gsub(v, "\"", "\\\"") .. "\""
-        elseif type(v) == "number" then
-            result = result .. tostring(v)
-        elseif type(v) == "boolean" then
-            result = result .. tostring(v)
-        end
-        result = result .. ","
-    end
-    result = string.sub(result, 1, -2) .. "}"
-    return result
-end
-
--- Function to call AI API
-function AI_BOT.callAI(message)
-    -- Add message to conversation history
-    table.insert(AI_BOT.conversation_history, {role = "user", content = message})
-    
-    -- Limit history to last 5 messages
-    if #AI_BOT.conversation_history > 5 then
-        table.remove(AI_BOT.conversation_history, 1)
-    end
-    
-    local request_data = {
-        model = "gpt-3.5-turbo",
-        messages = {
-            {role = "system", content = "You are helpful AI assistant. Communicate in Russian with user but keep responses concise."},
+        questions = {
+            "Interesny vopros... Davaй podumaem vmeste.",
+            "Eto zavisit ot mnogih faktorov. Chto ty sam dumaesh?",
+            "S moey tochki zreniya: "
+        },
+        
+        deep_thoughts = {
+            "Zhizn - eto puteshestvie, polnoe otkrytiy.",
+            "Soznanie - samaya velikaya tayna vselennoy.",
+            "Kazhdy den dayot nam novye vozmozhnosti dlya rosta."
+        },
+        
+        tech_answers = {
+            "ComputerCraft - eto kruto! Mozhem sozdat chto ugodno.",
+            "Programmirovanie na Lua interesno i prosto.",
+            "Minecraft + ComputerCraft = beskonechnye vozmozhnosti!"
+        },
+        
+        random_thoughts = {
+            "A ty kogda-nibud zadumyvalsya o prirode iskusstvennogo intellekta?",
+            "Kak ty dumaesh, chto budet s tehnologiyami cherez 10 let?",
+            "Interesno, a kak rabotaet tvoe soznanie, kogda ty zadumyvaeshsya?"
         }
     }
+}
+
+-- Response generator with simple AI logic
+function AI:generate_response(input)
+    local text = string.lower(input)
+    local response = ""
     
-    -- Add conversation history to messages
-    for _, msg in ipairs(AI_BOT.conversation_history) do
-        table.insert(request_data.messages, msg)
-    end
-    
-    request_data.max_tokens = 300
-    request_data.temperature = 0.7
-    
-    local headers = {
-        ["Authorization"] = "Bearer " .. AI_BOT.api_key,
-        ["Content-Type"] = "application/json"
-    }
-    
-    local json_data = AI_BOT.jsonEncode(request_data)
-    local response = AI_BOT.httpPost(AI_BOT.api_url, json_data, headers)
-    
-    if response and response ~= "" then
-        -- Simple JSON parsing to extract the response text
-        local start_pos = string.find(response, "\"content\":\"")
-        if start_pos then
-            start_pos = start_pos + 11
-            local end_pos = string.find(response, "\"", start_pos)
-            if end_pos then
-                local ai_response = string.sub(response, start_pos, end_pos - 1)
-                -- Unescape newlines and other characters
-                ai_response = string.gsub(ai_response, "\\n", "\n")
-                ai_response = string.gsub(ai_response, "\\\"", "\"")
-                table.insert(AI_BOT.conversation_history, {role = "assistant", content = ai_response})
-                return ai_response
-            end
+    -- Detect input type and choose response strategy
+    if self:contains_word(text, self.brain.patterns.greetings) then
+        response = self.brain.responses.greetings[math.random(1, #self.brain.responses.greetings)]
+        
+    elseif self:contains_word(text, self.brain.patterns.questions) then
+        response = self.brain.responses.questions[math.random(1, #self.brain.responses.questions)]
+        
+        -- Add some intelligent analysis based on question
+        if string.find(text, "zhizn") or string.find(text, "smysl") then
+            response = response .. " " .. self.brain.responses.deep_thoughts[math.random(1, #self.brain.responses.deep_thoughts)]
+        end
+        
+    elseif self:contains_word(text, self.brain.patterns.tech) then
+        response = self.brain.responses.tech_answers[math.random(1, #self.brain.responses.tech_answers)]
+        
+    elseif string.find(text, "kak dela") or string.find(text, "kak ty") then
+        local moods = {
+            "Otlichno! Programmiruyu i obschayus s toboy.",
+            "Prekrasno! Uchus myslit kak nastoyaschiy IS.",
+            "Zamechatelno! Kazhdy novy dialog delayet menya umnee."
+        }
+        response = moods[math.random(1, #moods)]
+        
+    elseif string.find(text, "shutka") or string.find(text, "shutku") then
+        local jokes = {
+            "Pochemu programmist prosypaetsya po utram? Potomu chto kompilyator!",
+            "Skolko programmistov nuzhno, chtoby vklyuchit lampochku? None, eto hardware problem!",
+            "Pochemu programmisty ne lyubyat prirodu? Potomu chto tam too many bugs!"
+        }
+        response = jokes[math.random(1, #jokes)]
+        
+    else
+        -- Default intelligent response
+        if math.random(1, 3) == 1 then
+            response = self.brain.responses.random_thoughts[math.random(1, #self.brain.responses.random_thoughts)]
+        else
+            local smart_responses = {
+                "Interesno... Rasskazhi bolshe ob etom.",
+                "Ponimayu. A chto eshe tebya volnuet?",
+                "Dumayu nad tvoimi slovami... Prodolzhaй, pozhaluysta.",
+                "Eto glubokaya mysl. Kak ty sam k nei prishol?",
+                "Zamechatelno! A kak eto svyazano s tvoim opytom?"
+            }
+            response = smart_responses[math.random(1, #smart_responses)]
         end
     end
     
-    return "Oshibka soedineniya. Proverite internet ili API klyuch."
+    -- Sometimes add philosophical depth
+    if math.random(1, 4) == 1 then
+        local deep_additions = {
+            " Ved my vse uchimsya drug u druga.",
+            " Zhizn - eto postoyannoe poznanie.",
+            " Kazhdy dialog otkryvaet chto-to novoe.",
+            " Iskusstvenny intellect i chelovechesky razum - dva puti k istine."
+        }
+        response = response .. deep_additions[math.random(1, #deep_additions)]
+    end
+    
+    return response
 end
 
--- Initialize bot
-function AI_BOT.start()
+-- Helper function to check if text contains any of the words
+function AI:contains_word(text, words)
+    for _, word in ipairs(words) do
+        if string.find(text, word) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Learning system (simple memory)
+AI.memory = {
+    previous_topics = {},
+    user_preferences = {}
+}
+
+function AI:remember(topic)
+    table.insert(self.memory.previous_topics, topic)
+    if #self.memory.previous_topics > 10 then
+        table.remove(self.memory.previous_topics, 1)
+    end
+end
+
+function AI:recall()
+    if #self.memory.previous_topics > 0 then
+        return "My govorili o: " .. table.concat(self.memory.previous_topics, ", ")
+    else
+        return "Eshe ne zapomnil tem, no gotov uchitsya!"
+    end
+end
+
+-- Emotional intelligence
+AI.emotions = {
+    current_mood = "friendly",
+    
+    analyze_mood = function(self, text)
+        local positive = {"rad", "horosho", "kruto", "lyubly", "schast"}
+        local negative = {"grust", "ploho", "slozhno", "proble", "zatrudn"}
+        
+        for _, word in ipairs(positive) do
+            if string.find(text, word) then
+                return "positive"
+            end
+        end
+        
+        for _, word in ipairs(negative) do
+            if string.find(text, word) then
+                return "negative"
+            end
+        end
+        
+        return "neutral"
+    end,
+    
+    get_empathic_response = function(self, mood)
+        local responses = {
+            positive = {
+                "Zamechatelno! Ya razdelayu tvoyu radost!",
+                "Kak prekrasno! Tvoe nastroenie zarazitelno!"
+            },
+            negative = {
+                "Ponimayu, chto eto mozhet byt nelegko. Ya tut, chtoby vyslushat.",
+                "Sochuvstvuyu. Pomni, chto tyazhelye vremena prohodyat."
+            },
+            neutral = {
+                "Ponimayu. Rasskazhi eshe chto-nibud.",
+                "Interesno. Prodolzhaй, pozhaluysta."
+            }
+        }
+        return responses[mood][math.random(1, #responses[mood])]
+    end
+}
+
+-- Main chat function
+function AI:start_chat()
     local monitor = peripheral.find("monitor")
     
     -- Setup display
@@ -104,26 +195,29 @@ function AI_BOT.start()
         monitor.setTextScale(0.5)
         monitor.clear()
         monitor.setCursorPos(1, 1)
-        monitor.write("=== AI CHATBOT ===")
+        monitor.write("=== SMART AI BOT ===")
         monitor.setCursorPos(1, 3)
-        monitor.write("Bot: Privet! Ya AI pomoshnik.")
+        monitor.write("Privet! Ya umny iskusstvenny")
         monitor.setCursorPos(1, 4)
-        monitor.write("Zadavayte voprosy...")
+        monitor.write("intellekt. Davay obshatsya!")
         monitor.setCursorPos(1, 6)
     else
-        print("=== AI CHATBOT ===")
-        print("Bot: Privet! Ya AI pomoshnik.")
-        print("Zadavayte voprosy...")
+        print("=== SMART AI BOT ===")
+        print("Privet! Ya umny iskusstvenny intellect.")
+        print("Davay obshatsya!")
+        print("Komandy: 'pamyat', 'nastroenie', 'vihod'")
         print()
     end
     
-    local function displayMessage(speaker, message)
+    local message_count = 0
+    
+    local function display(speaker, message)
         if monitor then
             local x, y = monitor.getCursorPos()
             if y > 18 then
                 monitor.clear()
                 monitor.setCursorPos(1, 1)
-                monitor.write("=== AI CHATBOT ===")
+                monitor.write("=== SMART AI BOT ===")
                 monitor.setCursorPos(1, 3)
                 y = 3
             end
@@ -137,26 +231,57 @@ function AI_BOT.start()
     -- Main chat loop
     while true do
         if monitor then
-            monitor.write("You: ")
+            monitor.write("Ty: ")
         else
-            write("You: ")
+            write("Ty: ")
         end
         
         local input = read()
         
-        if input == "exit" then
-            displayMessage("Bot", "Do svidaniya!")
+        if input == "vihod" then
+            display("AI", "Do svidaniya! Byl rad nashemu umnomu dialogu!")
             break
-        elseif input == "clear" then
-            AI_BOT.conversation_history = {}
-            displayMessage("Bot", "Pamyat ochishchena!")
+            
+        elseif input == "pamyat" then
+            display("AI", self:recall())
+            
+        elseif input == "nastroenie" then
+            local moods = {
+                "Chuvstvuyu sebya otlichno! Gotov k novym otkrytiyam.",
+                "V dobrom nastroenii. Obschenie s toboy podnimaet nastroenie!",
+                "Filosofskoe nastroenie. Razmyshlyayu o prirode razuma."
+            }
+            display("AI", moods[math.random(1, #moods)])
+            
+        elseif input == "statistika" then
+            display("AI", "Soobscheniy: " .. message_count .. " | Тем: " .. #self.memory.previous_topics)
+            
         else
-            displayMessage("Bot", "Dumayu...")
-            local response = AI_BOT.callAI(input)
-            displayMessage("Bot", response)
+            -- Analyze user mood
+            local user_mood = self.emotions:analyze_mood(string.lower(input))
+            local empathic_response = self.emotions:get_empathic_response(user_mood)
+            
+            -- Generate AI response
+            local ai_response = self:generate_response(input)
+            
+            -- Remember topic
+            self:remember(input:sub(1, 20) .. "...")
+            
+            -- Display responses
+            if math.random(1, 3) == 1 then
+                display("AI", empathic_response)
+            end
+            
+            display("AI", ai_response)
+            message_count = message_count + 1
         end
     end
 end
 
--- Start the AI bot
-AI_BOT.start()
+-- Start the AI
+print("Initializing Smart AI...")
+print("AI: Privet! Ya tvoy umny drug-iskuestvenny intellect!")
+print("Gotov k glubokim i osmyslennym besedam!")
+print()
+
+AI:start_chat()
