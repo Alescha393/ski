@@ -1,761 +1,994 @@
--- Advanced Mining Turtle System
--- Use: wget https://raw.githubusercontent.com/Alescha393/ski/main/advanced_miner.lua miner.lua
+-- ULTIMATE MINING TURTLE 9000
+-- Advanced AI-Powered Mining System
+-- wget https://raw.githubusercontent.com/Alescha393/ski/main/ultimate_miner.lua miner.lua
 
-local MINER = {
-    name = "AdvancedMiner",
-    version = "5.0",
-    config = {
-        mine_depth = 50,
-        tunnel_length = 100,
-        tunnel_width = 3,
-        target_blocks = {},
-        return_conditions = {
-            on_fuel_low = true,
-            fuel_threshold = 100,
-            on_inventory_full = true,
-            on_time_limit = false,
-            time_limit_minutes = 60,
-            on_blocks_mined = false,
-            blocks_limit = 500
-        },
-        mining_mode = "quarry", -- "quarry", "tunnel", "vein_miner"
-        auto_refuel = true,
-        emergency_return = true
-    },
-    status = {
-        total_blocks_mined = 0,
-        session_start_time = 0,
-        current_depth = 0,
-        is_mining = false,
-        should_return = false
+local ULTIMATE_MINER = {
+    name = "UltimateMiner9000",
+    version = "10.0",
+    config_file = "miner_config.dat",
+    state_file = "miner_state.dat"
+}
+
+-- ========== CORE SYSTEMS ==========
+ULTIMATE_MINER.config = {
+    -- Mining parameters
+    depth = 50,
+    length = 100,
+    width = 3,
+    height = 3,
+    
+    -- Mining modes
+    mode = "quarry", -- quarry, tunnel, vein, branch, spiral, layered
+    
+    -- Return conditions
+    fuel_threshold = 100,
+    inventory_threshold = 2,
+    time_limit = 3600, -- seconds
+    block_limit = 1000,
+    
+    -- Behavior
+    auto_refuel = true,
+    emergency_return = true,
+    smart_pathfinding = true,
+    avoid_lava = true,
+    
+    -- Target blocks
+    targets = {
+        "minecraft:coal_ore",
+        "minecraft:iron_ore",
+        "minecraft:gold_ore",
+        "minecraft:diamond_ore",
+        "minecraft:redstone_ore",
+        "minecraft:lapis_ore"
     }
 }
 
--- Configuration Management
-function MINER:load_config()
-    -- Try to load saved config
-    if fs.exists("miner_config.txt") then
-        local file = fs.open("miner_config.txt", "r")
+ULTIMATE_MINER.state = {
+    -- Position tracking
+    position = {x=0, y=0, z=0, facing=0},
+    home = {x=0, y=0, z=0, facing=0},
+    path_history = {},
+    
+    -- Mining stats
+    blocks_mined = 0,
+    session_start = 0,
+    session_time = 0,
+    total_blocks = 0,
+    
+    -- System state
+    is_mining = false,
+    is_paused = false,
+    should_return = false,
+    emergency_mode = false
+}
+
+-- ========== CONFIGURATION SYSTEM ==========
+function ULTIMATE_MINER:save_config()
+    local data = textutils.serialize(self.config)
+    local file = fs.open(self.config_file, "w")
+    file.write(data)
+    file.close()
+end
+
+function ULTIMATE_MINER:load_config()
+    if fs.exists(self.config_file) then
+        local file = fs.open(self.config_file, "r")
         local data = file.readAll()
         file.close()
         self.config = textutils.unserialize(data) or self.config
-        print("✓ Configuration loaded")
-    else
-        print("✓ Using default configuration")
     end
 end
 
-function MINER:save_config()
-    local file = fs.open("miner_config.txt", "w")
-    file.write(textutils.serialize(self.config))
+function ULTIMATE_MINER:save_state()
+    local data = textutils.serialize(self.state)
+    local file = fs.open(self.state_file, "w")
+    file.write(data)
     file.close()
-    print("✓ Configuration saved")
 end
 
-function MINER:reset_config()
+function ULTIMATE_MINER:load_state()
+    if fs.exists(self.state_file) then
+        local file = fs.open(self.state_file, "r")
+        local data = file.readAll()
+        file.close()
+        self.state = textutils.unserialize(data) or self.state
+    end
+end
+
+function ULTIMATE_MINER:reset_config()
     self.config = {
-        mine_depth = 50,
-        tunnel_length = 100,
-        tunnel_width = 3,
-        target_blocks = {},
-        return_conditions = {
-            on_fuel_low = true,
-            fuel_threshold = 100,
-            on_inventory_full = true,
-            on_time_limit = false,
-            time_limit_minutes = 60,
-            on_blocks_mined = false,
-            blocks_limit = 500
-        },
-        mining_mode = "quarry",
+        depth = 50,
+        length = 100,
+        width = 3,
+        height = 3,
+        mode = "quarry",
+        fuel_threshold = 100,
+        inventory_threshold = 2,
+        time_limit = 3600,
+        block_limit = 1000,
         auto_refuel = true,
-        emergency_return = true
+        emergency_return = true,
+        smart_pathfinding = true,
+        avoid_lava = true,
+        targets = {
+            "minecraft:coal_ore",
+            "minecraft:iron_ore",
+            "minecraft:gold_ore",
+            "minecraft:diamond_ore",
+            "minecraft:redstone_ore",
+            "minecraft:lapis_ore"
+        }
     }
     self:save_config()
-    print("✓ Configuration reset to defaults")
 end
 
--- Block Management
-function MINER:add_target_block(block_id)
-    if not self.config.target_blocks[block_id] then
-        self.config.target_blocks[block_id] = true
-        print("✓ Added target block: " .. block_id)
-        self:save_config()
-        return true
+-- ========== BLOCK MANAGEMENT SYSTEM ==========
+function ULTIMATE_MINER:add_block(block_id)
+    for _, target in ipairs(self.config.targets) do
+        if target == block_id then
+            return false, "Block already in list"
+        end
     end
-    print("ℹ Block already in target list: " .. block_id)
-    return false
+    table.insert(self.config.targets, block_id)
+    self:save_config()
+    return true, "Block added: " .. block_id
 end
 
-function MINER:remove_target_block(block_id)
-    if self.config.target_blocks[block_id] then
-        self.config.target_blocks[block_id] = nil
-        print("✓ Removed target block: " .. block_id)
-        self:save_config()
-        return true
+function ULTIMATE_MINER:remove_block(block_id)
+    for i, target in ipairs(self.config.targets) do
+        if target == block_id then
+            table.remove(self.config.targets, i)
+            self:save_config()
+            return true, "Block removed: " .. block_id
+        end
     end
-    print("✗ Block not found: " .. block_id)
-    return false
+    return false, "Block not found: " .. block_id
 end
 
-function MINER:list_target_blocks()
-    local blocks = {}
-    for block_id, _ in pairs(self.config.target_blocks) do
-        table.insert(blocks, block_id)
-    end
-    if #blocks == 0 then
+function ULTIMATE_MINER:clear_blocks()
+    self.config.targets = {}
+    self:save_config()
+    return true, "All blocks cleared"
+end
+
+function ULTIMATE_MINER:list_blocks()
+    if #self.config.targets == 0 then
         return "No target blocks configured"
-    else
-        return "Target blocks: " .. table.concat(blocks, ", ")
     end
+    return "Target blocks: " .. table.concat(self.config.targets, ", ")
 end
 
-function MINER:is_target_block(block_name)
-    -- Check exact match first
-    if self.config.target_blocks[block_name] then
-        return true
-    end
-    
-    -- Check partial matches for mod support
-    for target_id, _ in pairs(self.config.target_blocks) do
-        if string.find(block_name, target_id) then
+function ULTIMATE_MINER:is_target_block(block_name)
+    for _, target in ipairs(self.config.targets) do
+        if string.find(block_name, target) then
             return true
         end
     end
-    
     return false
 end
 
--- Fuel Management
-function MINER:check_fuel()
-    local fuel = turtle.getFuelLevel()
-    local fuel_limit = turtle.getFuelLimit()
-    
-    if fuel == "unlimited" then
-        return true, 9999
-    end
-    
-    return fuel, fuel_limit
+-- ========== FUEL MANAGEMENT SYSTEM ==========
+function ULTIMATE_MINER:get_fuel_info()
+    local current = turtle.getFuelLevel()
+    local limit = turtle.getFuelLimit()
+    local percent = math.floor((current / limit) * 100)
+    return current, limit, percent
 end
 
-function MINER:refuel_if_needed()
-    if not self.config.auto_refuel then
-        return true
-    end
+function ULTIMATE_MINER:refuel()
+    local fuels = {
+        "minecraft:coal",
+        "minecraft:coal_block",
+        "minecraft:lava_bucket",
+        "minecraft:blaze_rod",
+        "minecraft:charcoal"
+    }
     
-    local current_fuel, fuel_limit = self:check_fuel()
-    
-    -- If fuel is unlimited or we have enough, return
-    if current_fuel == true or current_fuel > self.config.return_conditions.fuel_threshold then
-        return true
-    end
-    
-    print("⛽ Low fuel (" .. current_fuel .. "), attempting to refuel...")
-    
-    -- Look for fuel items
     for slot = 1, 16 do
         local item = turtle.getItemDetail(slot)
         if item then
-            -- Common fuel items
-            if string.find(item.name, "coal") or 
-               string.find(item.name, "lava") or
-               string.find(item.name, "charcoal") or
-               string.find(item.name, "blaze") then
-                turtle.select(slot)
-                local needed = math.min(64, fuel_limit - current_fuel)
-                for i = 1, needed do
-                    if turtle.refuel(1) then
-                        current_fuel = turtle.getFuelLevel()
-                        if current_fuel >= self.config.return_conditions.fuel_threshold then
-                            print("✓ Refueled to " .. current_fuel)
-                            return true
+            for _, fuel in ipairs(fuels) do
+                if string.find(item.name, fuel) then
+                    turtle.select(slot)
+                    local needed = math.min(64, turtle.getFuelLimit() - turtle.getFuelLevel())
+                    for i = 1, needed do
+                        if turtle.refuel(1) then
+                            local new_fuel = turtle.getFuelLevel()
+                            if new_fuel >= self.config.fuel_threshold then
+                                return true, "Refueled to " .. new_fuel
+                            end
+                        else
+                            break
                         end
-                    else
-                        break
                     end
                 end
             end
         end
     end
-    
-    print("✗ No fuel items found or refueling failed")
-    return false
+    return false, "No fuel items found"
 end
 
-function MINER:should_return_home()
-    if self.status.should_return then
+function ULTIMATE_MINER:check_fuel()
+    local current, limit, percent = self:get_fuel_info()
+    if current <= self.config.fuel_threshold then
+        if self.config.auto_refuel then
+            return self:refuel()
+        else
+            return false, "Low fuel: " .. current
+        end
+    end
+    return true, "Fuel OK: " .. current
+end
+
+-- ========== INVENTORY MANAGEMENT SYSTEM ==========
+function ULTIMATE_MINER:get_inventory_info()
+    local used = 0
+    local total = 16
+    for i = 1, total do
+        if turtle.getItemCount(i) > 0 then
+            used = used + 1
+        end
+    end
+    local free = total - used
+    return used, free, total
+end
+
+function ULTIMATE_MINER:drop_items(slot)
+    if slot == "all" then
+        for i = 1, 16 do
+            turtle.select(i)
+            turtle.drop()
+        end
+        return true, "All items dropped"
+    else
+        slot = tonumber(slot)
+        if slot and slot >= 1 and slot <= 16 then
+            turtle.select(slot)
+            turtle.drop()
+            return true, "Slot " .. slot .. " dropped"
+        end
+    end
+    return false, "Invalid slot"
+end
+
+function ULTIMATE_MINER:store_items()
+    -- Try to place items in chest
+    for i = 1, 16 do
+        turtle.select(i)
+        if turtle.getItemCount(i) > 0 then
+            if turtle.drop() then
+                -- Success
+            end
+        end
+    end
+    return true, "Items stored"
+end
+
+-- ========== MOVEMENT SYSTEM ==========
+function ULTIMATE_MINER:update_position(direction)
+    local facing = self.state.position.facing
+    
+    if direction == "forward" then
+        if facing == 0 then self.state.position.z = self.state.position.z - 1
+        elseif facing == 1 then self.state.position.x = self.state.position.x + 1
+        elseif facing == 2 then self.state.position.z = self.state.position.z + 1
+        elseif facing == 3 then self.state.position.x = self.state.position.x - 1 end
+    elseif direction == "back" then
+        if facing == 0 then self.state.position.z = self.state.position.z + 1
+        elseif facing == 1 then self.state.position.x = self.state.position.x - 1
+        elseif facing == 2 then self.state.position.z = self.state.position.z - 1
+        elseif facing == 3 then self.state.position.x = self.state.position.x + 1 end
+    elseif direction == "up" then
+        self.state.position.y = self.state.position.y + 1
+    elseif direction == "down" then
+        self.state.position.y = self.state.position.y - 1
+    end
+    
+    table.insert(self.state.path_history, {
+        direction = direction,
+        position = {x=self.state.position.x, y=self.state.position.y, z=self.state.position.z},
+        time = os.time()
+    })
+    
+    if #self.state.path_history > 1000 then
+        table.remove(self.state.path_history, 1)
+    end
+end
+
+function ULTIMATE_MINER:smart_move(direction)
+    -- Check fuel first
+    local fuel_ok, fuel_msg = self:check_fuel()
+    if not fuel_ok then
+        return false, fuel_msg
+    end
+    
+    -- Check for blocks and handle them
+    local success, data
+    if direction == "forward" then
+        success, data = turtle.inspect()
+        if success then
+            if self:is_target_block(data.name) then
+                if turtle.dig() then
+                    self.state.blocks_mined = self.state.blocks_mined + 1
+                    self.state.total_blocks = self.state.total_blocks + 1
+                end
+            else
+                -- Non-target block
+                if self.config.mode == "tunnel" then
+                    turtle.dig()
+                end
+            end
+        end
+        success = turtle.forward()
+    elseif direction == "back" then
+        success = turtle.back()
+    elseif direction == "up" then
+        success, data = turtle.inspectUp()
+        if success and self:is_target_block(data.name) then
+            turtle.digUp()
+            self.state.blocks_mined = self.state.blocks_mined + 1
+            self.state.total_blocks = self.state.total_blocks + 1
+        end
+        success = turtle.up()
+    elseif direction == "down" then
+        success, data = turtle.inspectDown()
+        if success and self:is_target_block(data.name) then
+            turtle.digDown()
+            self.state.blocks_mined = self.state.blocks_mined + 1
+            self.state.total_blocks = self.state.total_blocks + 1
+        end
+        success = turtle.down()
+    end
+    
+    if success then
+        self:update_position(direction)
+        self:save_state()
+        return true, "Moved " .. direction
+    end
+    
+    return false, "Cannot move " .. direction
+end
+
+function ULTIMATE_MINER:turn_left()
+    turtle.turnLeft()
+    self.state.position.facing = (self.state.position.facing - 1) % 4
+    self:save_state()
+end
+
+function ULTIMATE_MINER:turn_right()
+    turtle.turnRight()
+    self.state.position.facing = (self.state.position.facing + 1) % 4
+    self:save_state()
+end
+
+function ULTIMATE_MINER:face_direction(target_facing)
+    while self.state.position.facing ~= target_facing do
+        local diff = (target_facing - self.state.position.facing) % 4
+        if diff <= 2 then
+            self:turn_right()
+        else
+            self:turn_left()
+        end
+    end
+end
+
+-- ========== MINING PATTERNS ==========
+function ULTIMATE_MINER:mine_quarry()
+    print("🏗️ Starting quarry mining...")
+    
+    for layer = 1, self.config.depth do
+        if self:should_stop_mining() then break end
+        
+        print("⏬ Moving to layer " .. layer)
+        for i = 1, self.config.height do
+            self:smart_move("down")
+        end
+        
+        for x = 1, self.config.width do
+            for z = 1, self.config.length do
+                if self:should_stop_mining() then break end
+                
+                -- Mine around current position
+                self:mine_around()
+                
+                if z < self.config.length then
+                    self:smart_move("forward")
+                end
+            end
+            
+            if x < self.config.width then
+                if x % 2 == 1 then
+                    self:turn_right()
+                    self:smart_move("forward")
+                    self:turn_right()
+                else
+                    self:turn_left()
+                    self:smart_move("forward")
+                    self:turn_left()
+                end
+            end
+        end
+        
+        -- Return to start of layer position
+        self:return_to_layer_start()
+    end
+end
+
+function ULTIMATE_MINER:mine_tunnel()
+    print("🚇 Starting tunnel mining...")
+    
+    for i = 1, self.config.length do
+        if self:should_stop_mining() then break end
+        
+        self:mine_around()
+        self:smart_move("forward")
+    end
+end
+
+function ULTIMATE_MINER:mine_vein()
+    print("🕸️ Starting vein mining...")
+    
+    local visited = {}
+    local queue = {{x=0, y=0, z=0}}
+    
+    while #queue > 0 and not self:should_stop_mining() do
+        self:mine_around()
+        
+        -- Check adjacent blocks for same vein
+        local directions = {
+            {dx=1, dy=0, dz=0}, {dx=-1, dy=0, dz=0},
+            {dx=0, dy=1, dz=0}, {dx=0, dy=-1, dz=0},
+            {dx=0, dy=0, dz=1}, {dx=0, dy=0, dz=-1}
+        }
+        
+        for _, dir in ipairs(directions) do
+            local new_pos = {
+                x = self.state.position.x + dir.dx,
+                y = self.state.position.y + dir.dy, 
+                z = self.state.position.z + dir.dz
+            }
+            
+            local pos_key = new_pos.x .. "," .. new_pos.y .. "," .. new_pos.z
+            if not visited[pos_key] then
+                visited[pos_key] = true
+                table.insert(queue, new_pos)
+            end
+        end
+        
+        if #queue > 0 then
+            local next_pos = table.remove(queue, 1)
+            self:move_to_position(next_pos)
+        end
+    end
+end
+
+function ULTIMATE_MINER:mine_branch()
+    print("🌿 Starting branch mining...")
+    
+    local main_tunnel_length = math.floor(self.config.length / 3)
+    
+    -- Dig main tunnel
+    for i = 1, main_tunnel_length do
+        if self:should_stop_mining() then break end
+        self:mine_around()
+        self:smart_move("forward")
+    end
+    
+    -- Dig branches
+    for branch = 1, self.config.width do
+        if self:should_stop_mining() then break end
+        
+        self:turn_right()
+        for i = 1, self.config.length do
+            if self:should_stop_mining() then break end
+            self:mine_around()
+            self:smart_move("forward")
+        end
+        
+        -- Return to main tunnel
+        self:turn_around()
+        for i = 1, self.config.length do
+            self:smart_move("forward")
+        end
+        self:turn_right()
+        
+        if branch < self.config.width then
+            self:smart_move("forward")
+        end
+    end
+end
+
+function ULTIMATE_MINER:mine_around()
+    -- Check all directions for target blocks
+    local checks = {
+        {name="forward", inspect=turtle.inspect, dig=turtle.dig},
+        {name="up", inspect=turtle.inspectUp, dig=turtle.digUp},
+        {name="down", inspect=turtle.inspectDown, dig=turtle.digDown},
+        {name="left", turn=self.turn_left, restore=self.turn_right},
+        {name="right", turn=self.turn_right, restore=self.turn_left}
+    }
+    
+    for _, check in ipairs(checks) do
+        if check.turn then check.turn(self) end
+        
+        local success, data = check.inspect()
+        if success and self:is_target_block(data.name) then
+            check.dig()
+            self.state.blocks_mined = self.state.blocks_mined + 1
+            self.state.total_blocks = self.state.total_blocks + 1
+        end
+        
+        if check.restore then check.restore(self) end
+    end
+end
+
+-- ========== RETURN & NAVIGATION SYSTEM ==========
+function ULTIMATE_MINER:should_stop_mining()
+    if self.state.should_return then
         return true
     end
     
-    local current_fuel = turtle.getFuelLevel()
-    
     -- Check fuel
-    if self.config.return_conditions.on_fuel_low and 
-       current_fuel <= self.config.return_conditions.fuel_threshold then
-        print("⚠ Low fuel, returning home")
+    local current_fuel = turtle.getFuelLevel()
+    if current_fuel <= self.config.fuel_threshold then
+        print("⚠ Low fuel: " .. current_fuel)
         return true
     end
     
     -- Check inventory
-    if self.config.return_conditions.on_inventory_full then
-        local empty_slots = 0
-        for i = 1, 16 do
-            if turtle.getItemCount(i) == 0 then
-                empty_slots = empty_slots + 1
-            end
-        end
-        if empty_slots <= 2 then
-            print("⚠ Inventory full, returning home")
-            return true
-        end
+    local used, free, total = self:get_inventory_info()
+    if free <= self.config.inventory_threshold then
+        print("⚠ Inventory full: " .. free .. " slots left")
+        return true
     end
     
     -- Check time limit
-    if self.config.return_conditions.on_time_limit then
-        local elapsed = os.time() - self.status.session_start_time
-        if elapsed > self.config.return_conditions.time_limit_minutes * 60 then
-            print("⚠ Time limit reached, returning home")
-            return true
-        end
+    local elapsed = os.time() - self.state.session_start
+    if elapsed > self.config.time_limit then
+        print("⚠ Time limit reached: " .. elapsed .. "s")
+        return true
     end
     
-    -- Check blocks mined
-    if self.config.return_conditions.on_blocks_mined then
-        if self.status.total_blocks_mined >= self.config.return_conditions.blocks_limit then
-            print("⚠ Block limit reached, returning home")
-            return true
-        end
+    -- Check block limit
+    if self.state.blocks_mined >= self.config.block_limit then
+        print("⚠ Block limit reached: " .. self.state.blocks_mined)
+        return true
     end
     
     return false
 end
 
--- Advanced Movement System
-function MINER:smart_move_forward()
-    -- Check for blocks and dig if necessary
-    local success, data = turtle.inspect()
-    if success then
-        if self:is_target_block(data.name) then
-            if turtle.dig() then
-                self.status.total_blocks_mined = self.status.total_blocks_mined + 1
-                print("⛏️ Mined: " .. data.name)
-            end
-        else
-            -- Non-target block, check if we should dig through it
-            if self.config.mining_mode == "tunnel" then
-                turtle.dig()
-            else
-                return false, "Block in way: " .. data.name
-            end
+function ULTIMATE_MINER:return_home()
+    print("🏠 Returning home...")
+    self.state.should_return = false
+    
+    -- First return to surface
+    while self.state.position.y < self.state.home.y do
+        self:smart_move("up")
+    end
+    while self.state.position.y > self.state.home.y do
+        self:smart_move("down")
+    end
+    
+    -- Then return to home XZ
+    while self.state.position.x ~= self.state.home.x or self.state.position.z ~= self.state.home.z do
+        -- Move in X direction
+        while self.state.position.x > self.state.home.x do
+            self:face_direction(3) -- west
+            self:smart_move("forward")
         end
-    end
-    
-    -- Check fuel before moving
-    if not self:refuel_if_needed() then
-        return false, "Low fuel"
-    end
-    
-    -- Attempt to move
-    if turtle.forward() then
-        return true
-    else
-        return false, "Movement blocked"
-    end
-end
-
-function MINER:smart_move_down()
-    local success, data = turtle.inspectDown()
-    if success then
-        if self:is_target_block(data.name) then
-            if turtle.digDown() then
-                self.status.total_blocks_mined = self.status.total_blocks_mined + 1
-                print("⛏️ Mined below: " .. data.name)
-            end
-        end
-    end
-    
-    if not self:refuel_if_needed() then
-        return false, "Low fuel"
-    end
-    
-    if turtle.down() then
-        self.status.current_depth = self.status.current_depth + 1
-        return true
-    else
-        return false, "Cannot move down"
-    end
-end
-
-function MINER:smart_move_up()
-    local success, data = turtle.inspectUp()
-    if success then
-        if self:is_target_block(data.name) then
-            if turtle.digUp() then
-                self.status.total_blocks_mined = self.status.total_blocks_mined + 1
-                print("⛏️ Mined above: " .. data.name)
-            end
-        end
-    end
-    
-    if not self:refuel_if_needed() then
-        return false, "Low fuel"
-    end
-    
-    if turtle.up() then
-        self.status.current_depth = self.status.current_depth - 1
-        return true
-    else
-        return false, "Cannot move up"
-    end
-end
-
-function MINER:turn_around()
-    turtle.turnLeft()
-    turtle.turnLeft()
-end
-
--- Mining Patterns
-function MINER:dig_to_depth(target_depth)
-    print("⬇ Digging to depth: " .. target_depth)
-    
-    while self.status.current_depth < target_depth do
-        if self:should_return_home() then
-            return false, "Return condition met"
+        while self.state.position.x < self.state.home.x do
+            self:face_direction(1) -- east
+            self:smart_move("forward")
         end
         
-        local success, reason = self:smart_move_down()
-        if not success then
-            -- Try to handle obstacles
-            for i = 1, 4 do
-                turtle.turnLeft()
-                local moved, _ = self:smart_move_forward()
-                if moved then
-                    self:smart_move_down()
-                    self:smart_move_forward()
-                    turtle.turnRight()
-                    turtle.turnRight()
-                    self:smart_move_forward()
-                    turtle.turnLeft()
-                    break
-                end
-            end
+        -- Move in Z direction
+        while self.state.position.z > self.state.home.z do
+            self:face_direction(2) -- south
+            self:smart_move("forward")
         end
-        
-        -- Scan and mine blocks around while descending
-        self:scan_and_mine_around()
+        while self.state.position.z < self.state.home.z do
+            self:face_direction(0) -- north
+            self:smart_move("forward")
+        end
     end
     
-    print("✓ Reached target depth: " .. target_depth)
-    return true
+    -- Face home direction
+    self:face_direction(self.state.home.facing)
+    
+    print("✅ Successfully returned home!")
+    self.state.is_mining = false
+    self:save_state()
 end
 
-function MINER:scan_and_mine_around()
-    -- Check all directions for target blocks
-    local directions = {
-        {name = "forward", inspect = turtle.inspect, dig = turtle.dig},
-        {name = "up", inspect = turtle.inspectUp, dig = turtle.digUp},
-        {name = "down", inspect = turtle.inspectDown, dig = turtle.digDown},
-        {name = "left", turn = turtle.turnLeft, restore = turtle.turnRight},
-        {name = "right", turn = turtle.turnRight, restore = turtle.turnLeft}
+function ULTIMATE_MINER:set_home()
+    self.state.home = {
+        x = self.state.position.x,
+        y = self.state.position.y,
+        z = self.state.position.z,
+        facing = self.state.position.facing
     }
-    
-    for _, dir in ipairs(directions) do
-        if self:should_return_home() then
-            break
-        end
-        
-        if dir.turn then
-            dir.turn()
-        end
-        
-        local success, data = dir.inspect()
-        if success and self:is_target_block(data.name) then
-            dir.dig()
-            self.status.total_blocks_mined = self.status.total_blocks_mined + 1
-            print("⛏️ Mined " .. dir.name .. ": " .. data.name)
-        end
-        
-        if dir.restore then
-            dir.restore()
-        end
-    end
+    self:save_state()
+    return "Home position set!"
 end
 
-function MINER:mine_quarry_pattern()
-    print("🏗️ Starting quarry mining pattern...")
-    
-    local mined_in_layer = 0
-    for x = 1, self.config.tunnel_width do
-        for z = 1, self.config.tunnel_length do
-            if self:should_return_home() then
-                return
-            end
-            
-            -- Mine current position and around
-            self:scan_and_mine_around()
-            
-            -- Move forward if not at end of row
-            if z < self.config.tunnel_length then
-                local success, reason = self:smart_move_forward()
-                if not success then
-                    print("⚠ Cannot move forward: " .. reason)
-                    break
-                end
-            end
-        end
-        
-        -- Turn around at end of row
-        if x < self.config.tunnel_width then
-            if x % 2 == 1 then
-                turtle.turnRight()
-                self:smart_move_forward()
-                turtle.turnRight()
-            else
-                turtle.turnLeft()
-                self:smart_move_forward()
-                turtle.turnLeft()
-            end
-        end
-    end
+function ULTIMATE_MINER:get_position()
+    local directions = {"north", "east", "south", "west"}
+    return string.format("📍 Position: X=%d Y=%d Z=%d Facing=%s",
+        self.state.position.x, self.state.position.y, self.state.position.z,
+        directions[self.state.position.facing + 1])
 end
 
-function MINER:mine_tunnel_pattern()
-    print("🚇 Starting tunnel mining pattern...")
-    
-    for i = 1, self.config.tunnel_length do
-        if self:should_return_home() then
-            return
-        end
-        
-        -- Mine forward and check sides
-        self:scan_and_mine_around()
-        
-        local success, reason = self:smart_move_forward()
-        if not success then
-            print("⚠ Cannot continue tunnel: " .. reason)
-            break
-        end
-    end
+function ULTIMATE_MINER:get_distance()
+    local dx = math.abs(self.state.position.x - self.state.home.x)
+    local dy = math.abs(self.state.position.y - self.state.home.y)
+    local dz = math.abs(self.state.position.z - self.state.home.z)
+    local distance = dx + dy + dz
+    return "📏 Distance to home: " .. distance .. " blocks"
 end
 
-function MINER:mine_vein_pattern()
-    print("🕸️ Starting vein mining pattern...")
+-- ========== COMMAND SYSTEM ==========
+function ULTIMATE_MINER:show_status()
+    local fuel_current, fuel_limit, fuel_percent = self:get_fuel_info()
+    local used_slots, free_slots, total_slots = self:get_inventory_info()
+    local elapsed = os.time() - self.state.session_start
     
-    local visited_positions = {}
-    local queue = {{x=0, y=0, z=0}}
-    
-    while #queue > 0 and not self:should_return_home() do
-        -- This is a simplified vein miner - would need position tracking
-        self:scan_and_mine_around()
-        
-        -- Try to find connected veins
-        for _, dir in ipairs({"forward", "up", "down", "left", "right"}) do
-            local moved = false
-            if dir == "left" then turtle.turnLeft() end
-            if dir == "right" then turtle.turnRight() end
-            
-            local success, data = turtle.inspect()
-            if success and self:is_target_block(data.name) then
-                if dir == "forward" then
-                    turtle.dig()
-                    turtle.forward()
-                    moved = true
-                elseif dir == "up" then
-                    turtle.digUp()
-                    turtle.up()
-                    moved = true
-                elseif dir == "down" then
-                    turtle.digDown()
-                    turtle.down()
-                    moved = true
-                end
-            end
-            
-            if moved then
-                self.status.total_blocks_mined = self.status.total_blocks_mined + 1
-                self:scan_and_mine_around()
-                
-                -- Return to original position
-                if dir == "forward" then
-                    self:turn_around()
-                    turtle.forward()
-                    self:turn_around()
-                elseif dir == "up" then
-                    turtle.down()
-                elseif dir == "down" then
-                    turtle.up()
-                end
-            end
-            
-            if dir == "left" then turtle.turnRight() end
-            if dir == "right" then turtle.turnLeft() end
-        end
-        
-        table.remove(queue, 1)
-    end
-end
-
--- Return System
-function MINER:return_to_surface()
-    print("🔼 Returning to surface...")
-    
-    while self.status.current_depth > 0 do
-        local success, reason = self:smart_move_up()
-        if not success then
-            print("⚠ Cannot move up: " .. reason)
-            -- Try to dig if blocked
-            if turtle.digUp() then
-                print("⛏️ Cleared blockage above")
-            else
-                -- Emergency escape - try to move horizontally
-                for i = 1, 4 do
-                    turtle.turnLeft()
-                    if turtle.forward() then
-                        print("➡ Emergency horizontal move")
-                        break
-                    end
-                end
-            end
-        end
-    end
-    
-    print("✅ Successfully returned to surface!")
-    self.status.is_mining = false
-end
-
--- Main Mining Function
-function MINER:start_mining_session()
-    if not turtle then
-        print("✗ This program must be run on a turtle!")
-        return false
-    end
-    
-    local fuel, limit = self:check_fuel()
-    if fuel ~= true and fuel < 50 then
-        print("✗ Not enough fuel to start mining")
-        print("Current fuel: " .. fuel .. "/" .. limit)
-        return false
-    end
-    
-    if next(self.config.target_blocks) == nil then
-        print("✗ No target blocks configured!")
-        print("Use 'addblock <block_id>' to add blocks to mine")
-        return false
-    end
-    
-    -- Initialize mining session
-    self.status = {
-        total_blocks_mined = 0,
-        session_start_time = os.time(),
-        current_depth = 0,
-        is_mining = true,
-        should_return = false
-    }
-    
-    print("⛏️ Starting mining session...")
-    print("Target blocks: " .. self:list_target_blocks())
-    print("Mining mode: " .. self.config.mining_mode)
-    print("Fuel: " .. fuel .. "/" .. limit)
-    
-    -- Dig to target depth
-    local success, reason = self:dig_to_depth(self.config.mine_depth)
-    if not success then
-        print("⚠ " .. reason)
-        if self.config.emergency_return then
-            self:return_to_surface()
-        end
-        return false
-    end
-    
-    -- Execute mining pattern based on mode
-    if self.config.mining_mode == "quarry" then
-        self:mine_quarry_pattern()
-    elseif self.config.mining_mode == "tunnel" then
-        self:mine_tunnel_pattern()
-    elseif self.config.mining_mode == "vein_miner" then
-        self:mine_vein_pattern()
-    end
-    
-    -- Return to surface
-    self:return_to_surface()
-    
-    -- Session summary
-    local session_time = os.time() - self.status.session_start_time
-    print("📊 Mining session completed!")
-    print("⏱️  Time: " .. session_time .. " seconds")
-    print("⛏️  Blocks mined: " .. self.status.total_blocks_mined)
-    
-    return true
-end
-
--- Command Interface
-function MINER:show_status()
-    local fuel, limit = self:check_fuel()
     return string.format([[
-=== Mining Turtle Status ===
-Fuel: %s/%s
-Depth: %d
-Blocks mined: %d
-Mining: %s
-Target blocks: %d
-Mining mode: %s
-]], fuel, limit, self.status.current_depth, self.status.total_blocks_mined,
-   tostring(self.status.is_mining), self:count_target_blocks(), self.config.mining_mode)
+=== ULTIMATE MINER STATUS ===
+
+🔋 Fuel: %d/%d (%d%%)
+🎒 Inventory: %d/%d slots used
+⛏️  Blocks mined: %d (session) / %d (total)
+⏱️  Session time: %d seconds
+📍 %s
+🏠 %s
+🔧 Mining: %s | Paused: %s
+    ]], fuel_current, fuel_limit, fuel_percent, used_slots, total_slots,
+        self.state.blocks_mined, self.state.total_blocks, elapsed,
+        self:get_position(), self:get_distance(),
+        tostring(self.state.is_mining), tostring(self.state.is_paused))
 end
 
-function MINER:count_target_blocks()
-    local count = 0
-    for _ in pairs(self.config.target_blocks) do
-        count = count + 1
+function ULTIMATE_MINER:show_stats()
+    local efficiency = 0
+    if self.state.session_time > 0 then
+        efficiency = math.floor(self.state.blocks_mined / self.state.session_time)
     end
-    return count
-end
-
-function MINER:parse_command(command)
-    local cmd = string.lower(command)
     
-    if cmd == "help" then
-        return self:show_help()
-        
-    elseif cmd == "status" then
-        return self:show_status()
-        
-    elseif cmd == "start" then
-        self:start_mining_session()
-        return "Mining session completed"
-        
-    elseif cmd == "return" then
-        self.status.should_return = true
-        return "Returning home on next check"
-        
-    elseif cmd == "emergency" then
-        self:return_to_surface()
-        return "Emergency return executed"
-        
-    elseif string.find(cmd, "addblock") then
-        local block_id = string.match(cmd, "addblock%s+(.+)")
-        if block_id then
-            return self:add_target_block(block_id) and "Block added" or "Block already exists"
-        else
-            return "Usage: addblock <block_id>"
-        end
-        
-    elseif string.find(cmd, "removeblock") then
-        local block_id = string.match(cmd, "removeblock%s+(.+)")
-        if block_id then
-            return self:remove_target_block(block_id) and "Block removed" or "Block not found"
-        else
-            return "Usage: removeblock <block_id>"
-        end
-        
-    elseif cmd == "listblocks" then
-        return self:list_target_blocks()
-        
-    elseif string.find(cmd, "set depth") then
-        local depth = tonumber(string.match(cmd, "set depth%s+(%d+)"))
-        if depth and depth > 0 then
-            self.config.mine_depth = depth
-            self:save_config()
-            return "Mining depth set to: " .. depth
-        else
-            return "Usage: set depth <number>"
-        end
-        
-    elseif string.find(cmd, "set mode") then
-        local mode = string.match(cmd, "set mode%s+(%a+)")
-        if mode and (mode == "quarry" or mode == "tunnel" or mode == "vein_miner") then
-            self.config.mining_mode = mode
-            self:save_config()
-            return "Mining mode set to: " .. mode
-        else
-            return "Usage: set mode <quarry|tunnel|vein_miner>"
-        end
-        
-    elseif cmd == "config" then
-        self:show_config()
-        return ""
-        
-    elseif cmd == "reset" then
-        self:reset_config()
-        return "Configuration reset"
-        
-    else
-        return "Unknown command. Type 'help' for available commands."
-    end
+    return string.format([[
+=== MINING STATISTICS ===
+
+📊 Session Stats:
+  Blocks mined: %d
+  Time elapsed: %d seconds
+  Efficiency: %d blocks/second
+
+📈 Total Stats:
+  Total blocks: %d
+  Total sessions: %d
+  Average efficiency: %d blocks/s
+    ]], self.state.blocks_mined, self.state.session_time, efficiency,
+        self.state.total_blocks, 1, efficiency) -- Placeholder for multi-session stats
 end
 
-function MINER:show_config()
-    print("=== Current Configuration ===")
-    print("Mining depth: " .. self.config.mine_depth)
-    print("Tunnel length: " .. self.config.tunnel_length)
-    print("Tunnel width: " .. self.config.tunnel_width)
-    print("Mining mode: " .. self.config.mining_mode)
-    print("Auto refuel: " .. tostring(self.config.auto_refuel))
-    print("Emergency return: " .. tostring(self.config.emergency_return))
-    print("\nReturn conditions:")
-    print("  On low fuel: " .. tostring(self.config.return_conditions.on_fuel_low))
-    print("  Fuel threshold: " .. self.config.return_conditions.fuel_threshold)
-    print("  On inventory full: " .. tostring(self.config.return_conditions.on_inventory_full))
-    print("  On time limit: " .. tostring(self.config.return_conditions.on_time_limit))
-    if self.config.return_conditions.on_time_limit then
-        print("  Time limit: " .. self.config.return_conditions.time_limit_minutes .. " minutes")
+function ULTIMATE_MINER:show_progress()
+    if not self.state.is_mining then
+        return "❌ Not currently mining"
     end
-    print("  On blocks mined: " .. tostring(self.config.return_conditions.on_blocks_mined))
-    if self.config.return_conditions.on_blocks_mined then
-        print("  Blocks limit: " .. self.config.return_conditions.blocks_limit)
-    end
+    
+    local depth_progress = math.floor((self.state.position.y / self.config.depth) * 100)
+    local time_progress = math.floor(((os.time() - self.state.session_start) / self.config.time_limit) * 100)
+    local block_progress = math.floor((self.state.blocks_mined / self.config.block_limit) * 100)
+    
+    return string.format([[
+=== MINING PROGRESS ===
+
+⏬ Depth: %d%%
+⏱️  Time: %d%%
+⛏️  Blocks: %d%%
+🎯 Targets: %d blocks
+    ]], depth_progress, time_progress, block_progress, #self.config.targets)
 end
 
-function MINER:show_help()
+function ULTIMATE_MINER:quick_setup()
+    self:reset_config()
+    print("✅ Quick setup complete!")
+    print("Target blocks: coal, iron, gold, diamond, redstone, lapis")
+    print("Mining mode: quarry")
+    print("Depth: 50")
+    print("Use 'start' to begin mining!")
+end
+
+function ULTIMATE_MINER:show_help()
     return [[
-=== Advanced Mining Turtle ===
+=== ULTIMATE MINER 9000 - COMMANDS ===
 
-Basic Commands:
-  start          - Begin mining session
-  status         - Show current status
-  return         - Signal to return home
-  emergency      - Immediate return to surface
+🚀 BASIC:
+  start       - Begin mining
+  stop        - Stop mining
+  pause       - Pause mining
+  resume      - Resume mining
+  return      - Return to home
 
-Block Management:
-  addblock <id>  - Add block to mine (e.g. minecraft:diamond_ore)
-  removeblock <id> - Remove block from targets
-  listblocks     - List target blocks
+⚙️ CONFIG:
+  set depth <n>      - Set mining depth
+  set length <n>     - Set tunnel length
+  set width <n>      - Set quarry width
+  set mode <mode>    - Set mode: quarry/tunnel/vein/branch
+  set fuel <n>       - Set fuel threshold
+  set time <s>       - Set time limit (seconds)
+  set blocks <n>     - Set block limit
 
-Configuration:
-  set depth <n>  - Set mining depth
-  set mode <type> - Set mining mode (quarry/tunnel/vein_miner)
-  config         - Show current configuration
-  reset          - Reset to default configuration
+🧱 BLOCKS:
+  add <block_id>     - Add target block
+  remove <block_id>  - Remove target block
+  list               - List target blocks
+  clear              - Clear all targets
+  scan               - Scan area for blocks
 
-Examples:
-  addblock minecraft:iron_ore
-  addblock thermal:tin_ore
+🏠 NAVIGATION:
+  home        - Set home position
+  position    - Show current position
+  distance    - Show distance to home
+  goto x y z  - Move to coordinates
+
+⛏️ PATTERNS:
+  quarry      - Start quarry mining
+  tunnel      - Start tunnel mining
+  vein        - Start vein mining
+  branch      - Start branch mining
+
+🔧 MAINTENANCE:
+  refuel      - Manual refuel
+  inventory   - Show inventory
+  drop <slot> - Drop items (or 'all')
+  store       - Store items in chest
+
+📊 INFO:
+  status      - System status
+  stats       - Mining statistics
+  progress    - Mining progress
+  targets     - Target blocks list
+  config      - Show configuration
+
+🔄 SYSTEM:
+  save        - Save state
+  load        - Load state
+  reset       - Reset to defaults
+  quick       - Quick setup
+  help        - Show this help
+  exit        - Exit program
+
+💡 EXAMPLES:
+  add thermal:tin_ore
   set depth 30
   set mode quarry
   start
-]]
+    ]]
 end
 
--- Initialize and start
-function MINER:start_control()
-    self:load_config()
+function ULTIMATE_MINER:execute_command(command)
+    local cmd = string.lower(command)
     
-    print("=== Advanced Mining Turtle ===")
+    -- Basic commands
+    if cmd == "start" then
+        self:start_mining()
+        return "Mining started"
+    elseif cmd == "stop" then
+        self.state.is_mining = false
+        return "Mining stopped"
+    elseif cmd == "pause" then
+        self.state.is_paused = true
+        return "Mining paused"
+    elseif cmd == "resume" then
+        self.state.is_paused = false
+        return "Mining resumed"
+    elseif cmd == "return" then
+        self.state.should_return = true
+        return "Returning home..."
+        
+    -- Configuration
+    elseif string.find(cmd, "set depth") then
+        local depth = tonumber(string.match(cmd, "set depth%s+(%d+)"))
+        if depth then
+            self.config.depth = depth
+            self:save_config()
+            return "Depth set to: " .. depth
+        end
+    elseif string.find(cmd, "set mode") then
+        local mode = string.match(cmd, "set mode%s+(%a+)")
+        if mode and (mode == "quarry" or mode == "tunnel" or mode == "vein" or mode == "branch") then
+            self.config.mode = mode
+            self:save_config()
+            return "Mode set to: " .. mode
+        end
+        
+    -- Block management
+    elseif string.find(cmd, "add") then
+        local block = string.match(cmd, "add%s+(.+)")
+        if block then
+            local success, msg = self:add_block(block)
+            return msg
+        end
+    elseif string.find(cmd, "remove") then
+        local block = string.match(cmd, "remove%s+(.+)")
+        if block then
+            local success, msg = self:remove_block(block)
+            return msg
+        end
+    elseif cmd == "list" then
+        return self:list_blocks()
+    elseif cmd == "clear" then
+        local success, msg = self:clear_blocks()
+        return msg
+        
+    -- Navigation
+    elseif cmd == "home" or cmd == "sethome" then
+        return self:set_home()
+    elseif cmd == "position" then
+        return self:get_position()
+    elseif cmd == "distance" then
+        return self:get_distance()
+        
+    -- Mining patterns
+    elseif cmd == "quarry" then
+        self:mine_quarry()
+        return "Quarry mining completed"
+    elseif cmd == "tunnel" then
+        self:mine_tunnel()
+        return "Tunnel mining completed"
+    elseif cmd == "vein" then
+        self:mine_vein()
+        return "Vein mining completed"
+    elseif cmd == "branch" then
+        self:mine_branch()
+        return "Branch mining completed"
+        
+    -- Maintenance
+    elseif cmd == "refuel" then
+        local success, msg = self:refuel()
+        return msg
+    elseif cmd == "inventory" then
+        local used, free, total = self:get_inventory_info()
+        return "Inventory: " .. used .. "/" .. total .. " slots used"
+    elseif string.find(cmd, "drop") then
+        local slot = string.match(cmd, "drop%s+(.+)")
+        local success, msg = self:drop_items(slot or "all")
+        return msg
+    elseif cmd == "store" then
+        local success, msg = self:store_items()
+        return msg
+        
+    -- Info
+    elseif cmd == "status" then
+        return self:show_status()
+    elseif cmd == "stats" then
+        return self:show_stats()
+    elseif cmd == "progress" then
+        return self:show_progress()
+    elseif cmd == "targets" then
+        return self:list_blocks()
+    elseif cmd == "config" then
+        return "Current config: depth=" .. self.config.depth .. ", mode=" .. self.config.mode
+        
+    -- System
+    elseif cmd == "save" then
+        self:save_state()
+        self:save_config()
+        return "State saved"
+    elseif cmd == "load" then
+        self:load_state()
+        self:load_config()
+        return "State loaded"
+    elseif cmd == "reset" then
+        self:reset_config()
+        return "Configuration reset"
+    elseif cmd == "quick" then
+        self:quick_setup()
+        return ""
+    elseif cmd == "help" then
+        return self:show_help()
+        
+    else
+        return "❌ Unknown command: " .. command .. "\nType 'help' for available commands."
+    end
+    
+    return "Command executed: " .. command
+end
+
+-- ========== MAIN MINING FUNCTION ==========
+function ULTIMATE_MINER:start_mining()
+    if not turtle then
+        print("❌ This program must run on a turtle!")
+        return
+    end
+    
+    -- Check fuel
+    local fuel_ok, fuel_msg = self:check_fuel()
+    if not fuel_ok then
+        print("❌ " .. fuel_msg)
+        return
+    end
+    
+    -- Check targets
+    if #self.config.targets == 0 then
+        print("❌ No target blocks configured!")
+        print("Use 'add <block_id>' to add blocks")
+        return
+    end
+    
+    -- Initialize mining session
+    self.state.is_mining = true
+    self.state.is_paused = false
+    self.state.should_return = false
+    self.state.blocks_mined = 0
+    self.state.session_start = os.time()
+    
+    print("🚀 Starting Ultimate Miner 9000!")
+    print("🎯 Targets: " .. #self.config.targets .. " blocks")
+    print("⛏️  Mode: " .. self.config.mode)
+    print("⏬ Depth: " .. self.config.depth)
+    
+    -- Execute mining based on mode
+    if self.config.mode == "quarry" then
+        self:mine_quarry()
+    elseif self.config.mode == "tunnel" then
+        self:mine_tunnel()
+    elseif self.config.mode == "vein" then
+        self:mine_vein()
+    elseif self.config.mode == "branch" then
+        self:mine_branch()
+    end
+    
+    -- Return home when done
+    if self.config.emergency_return then
+        self:return_home()
+    end
+    
+    -- Session summary
+    self.state.session_time = os.time() - self.state.session_start
+    local efficiency = math.floor(self.state.blocks_mined / math.max(self.state.session_time, 1))
+    
+    print("📊 Session Complete!")
+    print("⏱️  Time: " .. self.state.session_time .. "s")
+    print("⛏️  Blocks: " .. self.state.blocks_mined)
+    print("📈 Efficiency: " .. efficiency .. " blocks/s")
+    
+    self.state.is_mining = false
+    self:save_state()
+end
+
+-- ========== INITIALIZATION ==========
+function ULTIMATE_MINER:initialize()
+    -- Load saved state and config
+    self:load_config()
+    self:load_state()
+    
+    -- Set home if not set
+    if self.state.home.x == nil then
+        self:set_home()
+    end
+    
+    print("=== ULTIMATE MINER 9000 ===")
     print("Version: " .. self.version)
+    print("Type 'quick' for instant setup")
     print("Type 'help' for commands")
-    print("Configure target blocks before starting!")
     print()
+end
+
+function ULTIMATE_MINER:run()
+    self:initialize()
     
     while true do
-        write("Miner> ")
+        write("MINER> ")
         local command = read()
         
         if command == "exit" or command == "quit" then
-            print("Goodbye!")
+            print("👋 Goodbye!")
             break
         end
         
-        local result = self:parse_command(command)
+        local result = self:execute_command(command)
         if result ~= "" then
             print(result)
         end
@@ -763,5 +996,5 @@ function MINER:start_control()
     end
 end
 
--- Start the program
-MINER:start_control()
+-- Start the ultimate miner
+ULTIMATE_MINER:run()
