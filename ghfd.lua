@@ -1,13 +1,9 @@
 -- Tetris for ComputerCraft
--- Для работы требуется advanced computer или advanced turtle
-
--- Размеры игрового поля
 local width, height = 10, 20
 local score = 0
 local level = 1
 local linesCleared = 0
 
--- Игровое поле (0 - пусто, 1 - занято)
 local grid = {}
 for x = 1, width do
     grid[x] = {}
@@ -16,34 +12,33 @@ for x = 1, width do
     end
 end
 
--- Фигуры тетрамино и их цвета
 local shapes = {
     {
-        {1,1,1,1}, -- I
+        {1,1,1,1},
         color = colors.cyan
     },
     {
-        {1,1,1,0,1}, -- T
+        {1,1,1,0,1},
         color = colors.purple
     },
     {
-        {1,1,1,0,0,0,1}, -- L
+        {1,1,1,0,0,0,1},
         color = colors.orange
     },
     {
-        {1,1,1,0,0,0,0,1}, -- J
+        {1,1,1,0,0,0,0,1},
         color = colors.blue
     },
     {
-        {1,1,0,1,1}, -- O
+        {1,1,0,1,1},
         color = colors.yellow
     },
     {
-        {0,1,1,1,1,0}, -- S
+        {0,1,1,1,1,0},
         color = colors.lime
     },
     {
-        {1,1,0,0,1,1}, -- Z
+        {1,1,0,0,1,1},
         color = colors.red
     }
 }
@@ -52,7 +47,6 @@ local currentPiece
 local currentX, currentY
 local currentRotation
 
--- Функция для создания новой случайной фигуры
 local function newPiece()
     local shapeIndex = math.random(1, #shapes)
     currentPiece = shapes[shapeIndex]
@@ -61,12 +55,10 @@ local function newPiece()
     currentRotation = 1
 end
 
--- Функция поворота фигуры
 local function rotatePiece()
     local oldRotation = currentRotation
     currentRotation = (currentRotation % 4) + 1
     
-    -- Проверка столкновения после поворота
     for i = 1, 4 do
         for j = 1, 4 do
             if currentPiece[(currentRotation - 1) * 4 + j] and 
@@ -82,7 +74,6 @@ local function rotatePiece()
     end
 end
 
--- Проверка столкновений
 local function checkCollision(dx, dy)
     for i = 1, 4 do
         for j = 1, 4 do
@@ -99,7 +90,6 @@ local function checkCollision(dx, dy)
     return false
 end
 
--- Фиксация фигуры на поле
 local function lockPiece()
     for i = 1, 4 do
         for j = 1, 4 do
@@ -115,7 +105,6 @@ local function lockPiece()
     end
 end
 
--- Проверка и удаление заполненных линий
 local function clearLines()
     local linesToClear = {}
     
@@ -151,16 +140,14 @@ local function clearLines()
     end
 end
 
--- Отрисовка игрового поля
 local function draw()
     term.clear()
     term.setCursorPos(1, 1)
-    print("Тетрис")
-    print("Счет: " .. score)
-    print("Уровень: " .. level)
-    print("Линий: " .. linesCleared)
+    print("Tetris")
+    print("Score: " .. score)
+    print("Level: " .. level)
+    print("Lines: " .. linesCleared)
     
-    -- Рисуем границы
     for x = 1, width + 2 do
         term.setCursorPos(x, 5)
         term.write("#")
@@ -175,7 +162,6 @@ local function draw()
         term.write("#")
     end
     
-    -- Рисуем сетку
     for x = 1, width do
         for y = 1, height do
             if grid[x][y] ~= 0 then
@@ -187,7 +173,6 @@ local function draw()
         end
     end
     
-    -- Рисуем текущую фигуру
     if currentPiece then
         for i = 1, 4 do
             for j = 1, 4 do
@@ -207,7 +192,6 @@ local function draw()
     end
 end
 
--- Основной игровой цикл
 local function gameLoop()
     newPiece()
     local lastFall = os.clock()
@@ -217,7 +201,6 @@ local function gameLoop()
     while true do
         local currentTime = os.clock()
         
-        -- Автоматическое падение
         if currentTime - lastFall >= fallSpeed then
             if not checkCollision(0, 1) then
                 currentY = currentY + 1
@@ -228,15 +211,14 @@ local function gameLoop()
                 if checkCollision(0, 0) then
                     term.clear()
                     term.setCursorPos(1, 1)
-                    print("Игра окончена!")
-                    print("Финальный счет: " .. score)
+                    print("Game Over!")
+                    print("Final Score: " .. score)
                     return
                 end
             end
             lastFall = currentTime
         end
         
-        -- Обработка ввода
         local event, key = os.pullEvent("key")
         if key == keys.left and not checkCollision(-1, 0) then
             currentX = currentX - 1
@@ -248,7 +230,6 @@ local function gameLoop()
         elseif key == keys.up then
             rotatePiece()
         elseif key == keys.space then
-            -- Ускоренное падение
             while not checkCollision(0, 1) do
                 currentY = currentY + 1
                 score = score + 2
@@ -256,7 +237,7 @@ local function gameLoop()
         elseif key == keys.q then
             term.clear()
             term.setCursorPos(1, 1)
-            print("Выход из игры")
+            print("Quit Game")
             return
         end
         
@@ -264,19 +245,18 @@ local function gameLoop()
     end
 end
 
--- Запуск игры
 if not term.isColor() then
-    print("Для этой игры требуется advanced computer!")
+    print("This game requires advanced computer!")
     return
 end
 
 term.clear()
-print("Добро пожаловать в Тетрис!")
-print("Управление:")
-print("Стрелки: движение")
-print("Пробел: ускоренное падение")
-print("Q: выход")
-print("Нажмите любую клавишу для начала...")
+print("Welcome to Tetris!")
+print("Controls:")
+print("Arrows: move")
+print("Space: hard drop")
+print("Q: quit")
+print("Press any key to start...")
 os.pullEvent("key")
 
 gameLoop()
