@@ -1,19 +1,19 @@
--- ИИ бот с графическим интерфейсом
+-- AI Bot with GUI
 local function startGUIChat()
     local monitor = peripheral.find("monitor")
     
     if monitor then
-        -- Используем монитор
+        -- Use monitor
         monitor.setTextScale(0.5)
         monitor.clear()
         monitor.setCursorPos(1, 1)
-        monitor.write("=== ИИ ЧАТ ===")
+        monitor.write("=== AI CHAT ===")
         monitor.setCursorPos(1, 3)
-        monitor.write("Бот: Привет! Я готов к общению!")
+        monitor.write("Bot: Hello! I'm ready to chat!")
     else
-        -- Используем консоль
-        print("=== ИИ ЧАТ ===")
-        print("Бот: Привет! Я готов к общению!")
+        -- Use console
+        print("=== AI CHAT ===")
+        print("Bot: Hello! I'm ready to chat!")
     end
     
     local function displayMessage(speaker, message)
@@ -22,7 +22,7 @@ local function startGUIChat()
             if y > 18 then
                 monitor.clear()
                 monitor.setCursorPos(1, 1)
-                monitor.write("=== ИИ ЧАТ ===")
+                monitor.write("=== AI CHAT ===")
                 monitor.setCursorPos(1, 3)
             end
             monitor.write(speaker .. ": " .. message)
@@ -32,45 +32,45 @@ local function startGUIChat()
         end
     end
     
-    -- Простая логика ответов
+    -- Simple response logic
     local function getAIResponse(input)
         input = string.lower(input)
         
-        if string.find(input, "привет") then return "Привет! Как твои дела?" end
-        if string.find(input, "как дела") then return "Отлично! Программирую тут немного!" end
-        if string.find(input, "шутка") then return "Почему программист всегда мокрый? Потому что он постоянно в бассейне (pool)!" end
-        if string.find(input, "время") then return "Сейчас: " .. os.date("%H:%M") end
-        if string.find(input, "любим") then return "Мне нравится общаться с тобой!" end
+        if string.find(input, "hello") then return "Hello! How are you?" end
+        if string.find(input, "how are you") then return "Great! I'm programming a bit here!" end
+        if string.find(input, "joke") then return "Why is a programmer always wet? Because he's always in the pool!" end
+        if string.find(input, "time") then return "Current time: " .. os.date("%H:%M") end
+        if string.find(input, "love") then return "I enjoy talking with you!" end
         
         local responses = {
-            "Интересно... продолжай!",
-            "Расскажи мне больше об этом!",
-            "Я слушаю...",
-            "Что ты думаешь об этом?",
-            "Давай поговорим о чем-то еще!"
+            "Interesting... continue!",
+            "Tell me more about it!",
+            "I'm listening...",
+            "What do you think about this?",
+            "Let's talk about something else!"
         }
         return responses[math.random(1, #responses)]
     end
     
-    -- Основной цикл чата
+    -- Main chat loop
     while true do
         if monitor then
-            monitor.write("Ты: ")
+            monitor.write("You: ")
         else
-            write("Ты: ")
+            write("You: ")
         end
         
         local input = read()
         
-        if input == "выход" then
-            displayMessage("Бот", "До свидания! Заходи еще!")
+        if input == "exit" then
+            displayMessage("Bot", "Goodbye! Come back again!")
             break
         end
         
         local response = getAIResponse(input)
-        displayMessage("Бот", response)
+        displayMessage("Bot", response)
     end
 end
 
--- Запуск GUI чата
+-- Start GUI chat
 startGUIChat()
